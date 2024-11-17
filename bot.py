@@ -19,8 +19,8 @@ import requests
 from bs4 import BeautifulSoup
 import re
 
-TELEGRAM_TOKEN = "7875405403:AAGY479kstuypz053t_ULPqiQvA0GyxgY88"
-TWITTER_BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAAAIUxAEAAAAApXjTFIAGjUGhh4cnEIaZ3IvlgTw%3D1Ea4WoJPcmPL59UqZiR0AqUkJMrvXMjg91KTNzrx6ulC4snOyr"
+TELEGRAM_TOKEN = "YOUR_TOKEN_NUMBER"
+TWITTER_BEARER_TOKEN = "TOKEN_BEARER"
 
 def scrape_emails(query):
     url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
@@ -35,7 +35,7 @@ def scrape_emails(query):
 query = "fashion influencers email site:instagram.com"
 print(scrape_emails(query))
 
-TELEGRAM_TOKEN = os.getenv("7875405403:AAGY479kstuypz053t_ULPqiQvA0GyxgY88")
+TELEGRAM_TOKEN = os.getenv("YOUR_TOKEN_NUMBER")
 TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 
 # Start Command Handler
