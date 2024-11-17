@@ -96,7 +96,7 @@ def scrape_instagram(username: str) -> str:
     # Log in to Instagram (provide your credentials here)
     loader.context.log("Logging in to Instagram...")
     try:
-        loader.login('gilehrii', 'qwertyuiop123')  # Replace with your actual Instagram username and password
+        loader.login('username', 'password')  # Replace with your actual Instagram username and password
     except Exception as e:
         print(f"Login failed: {e}")
         return None
