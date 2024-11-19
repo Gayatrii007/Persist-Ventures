@@ -7,35 +7,71 @@ import instaloader
 import tweepy
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 import csv
-import re
-import os
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 import os
+import re
+
+TELEGRAM_TOKEN = Telegram_Token
+TWITTER_BEARER_TOKEN = BEARER_TOKEN
+
+import time
 
 import requests
 from bs4 import BeautifulSoup
-import re
 
-TELEGRAM_TOKEN = "YOUR_TOKEN_NUMBER"
-TWITTER_BEARER_TOKEN = "TOKEN_BEARER"
+def search_google(query):
+    """
+    Perform a Google search using Selenium and return the top results.
+    """
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
 
-def scrape_emails(query):
-    url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
+    # Set up Selenium WebDriver options
+    options = Options()
+    options.add_argument("--headless")  # Run Chrome in headless mode
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-    soup = BeautifulSoup(response.text, 'html.parser')
-    emails = re.findall(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", soup.text)
-    return list(set(emails))  # Remove duplicates
+    url = f"https://www.google.com/search?q={query}"
+    driver.get(url)
 
-# Example Usage
-query = "fashion influencers email site:instagram.com"
-print(scrape_emails(query))
+    try:
+        # Wait for results to load (use an explicit wait)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'div.tF2Cxc'))
+        )
 
-TELEGRAM_TOKEN = os.getenv("YOUR_TOKEN_NUMBER")
+        results = []
+        # Locate and parse results
+        for result in driver.find_elements(By.CSS_SELECTOR, 'div.tF2Cxc'):
+            try:
+                title = result.find_element(By.CSS_SELECTOR, 'h3').text
+                link = result.find_element(By.CSS_SELECTOR, 'a').get_attribute('href')
+                snippet_element = result.find_elements(By.CSS_SELECTOR, '.VwiC3b')
+                snippet = snippet_element[0].text if snippet_element else "No snippet available"
+                results.append({'title': title, 'link': link, 'snippet': snippet})
+            except Exception as e:
+                print(f"Error parsing result: {e}")
+                continue
+
+    except Exception as e:
+        print(f"Error loading Google search results: {e}")
+        results = []
+
+    finally:
+        driver.quit()
+
+    return results
+
+TELEGRAM_TOKEN = os.getenv("Telegram_Token")
 TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 
 # Start Command Handler
@@ -44,17 +80,26 @@ async def start(update: Update, context: CallbackContext):
     await update.message.reply_text("Hello! I am your bot. How can I help you today?")
 
 async def handle_input(update, context):
-    user_input = update.message.text
-    await update.message.reply_text(f"Searching for: {user_input}")
+    user_input = update.message.text.strip()
+    if not user_input:
+        await update.message.reply_text("Please provide a search term.")
+        return
+    await update.message.reply_text(f"Searching Google for: {user_input}...")
     
-    # Call your scraping function
-    query = f"{user_input} site:instagram.com"
-    emails = scrape_emails(query)
+    # Perform a Google search
+    results = search_google(user_input)
     
-    if emails:
-        update.message.reply_text(f"Found emails: {', '.join(emails)}")
+    if results:
+        # Format results as a message
+        response = "Here are the top search results:\n\n"
+        for result in results[:5]:  # Limit to top 5 results
+            response += f"Title: {result['title']}\n"
+            response += f"Link: {result['link']}\n"
+            response += f"Snippet: {result['snippet']}\n\n"
+        await update.message.reply_text(response)
     else:
-        update.message.reply_text("No emails found. Try a different query.")
+        await update.message.reply_text("No results found. Try a different query.")
+
 # Scrape Command Handler
 async def scrape(update: Update, context: CallbackContext):
     """Handle the /scrape command."""
@@ -93,24 +138,27 @@ async def scrape(update: Update, context: CallbackContext):
 def scrape_instagram(username: str) -> str:
     loader = instaloader.Instaloader()
 
-    # Log in to Instagram (provide your credentials here)
-    loader.context.log("Logging in to Instagram...")
     try:
-        loader.login('username', 'password')  # Replace with your actual Instagram username and password
-    except Exception as e:
-        print(f"Login failed: {e}")
-        return None
+        # Load session or login
+        loader.load_session_from_file('username')  # Replace with your username
+    except FileNotFoundError:
+        try:
+            loader.login('gilehrii', 'password')  # Replace with your credentials
+            loader.save_session_to_file()  # Save session for reuse
+        except Exception as e:
+            print(f"Login failed: {e}")
+            return None
 
-    # Now, load the profile after logging in
     try:
+        # Fetch the profile and extract bio
         profile = instaloader.Profile.from_username(loader.context, username)
         bio = profile.biography
-        # Extract email from bio using regex
-        email = extract_email_from_text(bio)
+        email = extract_email_from_text(bio)  # Extract email if present
         return email
     except Exception as e:
         print(f"Failed to scrape Instagram: {e}")
         return None
+
 
 # TikTok Scraping (using Selenium)
 def scrape_tiktok(username: str) -> str:
@@ -132,11 +180,28 @@ def scrape_tiktok(username: str) -> str:
 
 # Twitter Scraping (using Tweepy)
 def scrape_twitter(username: str) -> str:
-    client = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN)
-    user = client.get_user(username=username, user_fields=["description"])
-    bio = user.data.description
-    email = extract_email_from_text(bio)
-    return email
+    try:
+        # Initialize the client with your bearer token
+        client = tweepy.Client(bearer_token=BEARER_TOKEN)
+
+        # Fetch the user's details
+        response = client.get_user(username=username, user_fields=["description"])
+
+        if response.data:
+            bio = response.data.description
+            if bio:
+                return extract_email_from_text(bio)
+            else:
+                print("No description found for this user.")
+                return None
+        else:
+            print("User not found or API error.")
+            return None
+
+    except tweepy.TweepyException as e:
+        print(f"Twitter scraping failed: {e}")
+        return None
+
 
 # Email Extraction using regex
 def extract_email_from_text(text: str) -> str:
@@ -171,7 +236,7 @@ def save_to_csv(username: str, platform: str, email: str):
 
 # Main function to run the bot
 def main():
-    application = Application.builder().token("7875405403:AAGY479kstuypz053t_ULPqiQvA0GyxgY88").build()
+    application = Application.builder().token("TELEGRAM_TOKEN").build()
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
