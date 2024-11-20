@@ -143,7 +143,7 @@ def scrape_instagram(username: str) -> str:
         loader.load_session_from_file('username')  # Replace with your username
     except FileNotFoundError:
         try:
-            loader.login('gilehrii', 'password')  # Replace with your credentials
+            loader.login('username', 'password')  # Replace with your credentials
             loader.save_session_to_file()  # Save session for reuse
         except Exception as e:
             print(f"Login failed: {e}")
